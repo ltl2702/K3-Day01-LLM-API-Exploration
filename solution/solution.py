@@ -525,32 +525,20 @@ def format_comparison_table(results: list[dict]) -> str:
 # ---------------------------------------------------------------------------
 # Entry point — demo chạy thật (cần OPENAI_API_KEY)
 # ---------------------------------------------------------------------------
-# if __name__ == "__main__":
-#     print("=== So sánh model ===")
-#     result = compare_models(
-#         "Giải thích khác biệt giữa temperature và top_p trong một câu."
-#     )
-#     for key, value in result.items():
-#         print(f"{key}: {value}")
+if __name__ == "__main__":
+    print("=== So sánh model ===")
+    result = compare_models(
+        "Giải thích khác biệt giữa temperature và top_p trong một câu."
+    )
+    for key, value in result.items():
+        print(f"{key}: {value}")
 
-#     print("\n=== Trợ lý CLI (gõ 'quit' để thoát) ===")
-#     stats = run_assistant(
-#         persona="Bạn là trợ giảng thân thiện của khóa AI, "
-#                 "trả lời ngắn gọn bằng tiếng Việt.",
-#     )
-#     print("\n--- Thống kê phiên chat ---")
-#     for key, value in stats.items():
-#         if key != "history":
-#             print(f"{key}: {value}")
-
-
-question = "Giải thích blockchain là gì?"
-
-prompts = [
-    "Bạn là giáo viên tiểu học, giải thích thật đơn giản cho trẻ 8 tuổi.",
-    "Bạn là chuyên gia tài chính, trả lời chuyên sâu bằng thuật ngữ kỹ thuật."
-]
-
-for prompt in prompts:
-    print(f"\n=== {prompt} ===")
-    print(chat_with_system_prompt(prompt, question))
+    print("\n=== Trợ lý CLI (gõ 'quit' để thoát) ===")
+    stats = run_assistant(
+        persona="Bạn là trợ giảng thân thiện của khóa AI, "
+                "trả lời ngắn gọn bằng tiếng Việt.",
+    )
+    print("\n--- Thống kê phiên chat ---")
+    for key, value in stats.items():
+        if key != "history":
+            print(f"{key}: {value}")
