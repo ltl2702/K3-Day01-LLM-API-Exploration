@@ -17,6 +17,7 @@ import time
 from typing import Any, Callable
 
 from dotenv import load_dotenv
+from openai import OpenAI
 
 # Nạp OPENAI_API_KEY từ file .env (copy .env.example thành .env và dán key vào)
 load_dotenv()
@@ -299,7 +300,45 @@ def streaming_chatbot() -> None:
         - Cắt history còn 3 lượt cuối (6 message): history = history[-6:]
     """
     # TODO: vòng lặp while, đọc input, stream phản hồi, duy trì history
-    raise NotImplementedError("Implement streaming_chatbot")
+    from openai import OpenAI
+
+    history = []
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    while True:
+        user_input = input("You: ")
+        if user_input.lower() in ["quit", "exit"]:
+            print("Exiting chatbot.")
+            break 
+                        
+        history.append(
+            {
+                "role": "user",
+                "content": user_input
+            }
+        )
+        
+        stream = client.chat.completions.create(
+            model="gpt-4o",
+            messages=history,
+            stream=True,
+        )
+        
+        assistant_reply = ""
+        
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            print(delta, end="", flush=True)
+            assistant_reply += delta
+        print()
+        
+        history.append(
+            {
+                "role": "assistant",
+                "content": assistant_reply
+            }
+        )
+        
+        history = history[-6:]
 
 
 # ---------------------------------------------------------------------------
@@ -326,7 +365,16 @@ def retry_with_backoff(
         Exception cuối cùng của fn() sau khi hết số lần thử.
     """
     # TODO: vòng lặp retry với exponential backoff
-    raise NotImplementedError("Implement retry_with_backoff")
+    for attempt in range(max_retries + 1):
+            try:
+                return fn()
+            
+            except Exception as e: 
+                if attempt == max_retries:
+                    raise  
+                else:
+                    delay = base_delay * (2 ** attempt)
+                    time.sleep(delay)  
 
 
 # ===========================================================================
@@ -385,7 +433,35 @@ def run_assistant(
                 "total_cost": total_cost, "history": history}
     """
     # TODO: triển khai theo khung sườn trong docstring
-    raise NotImplementedError("Implement run_assistant")
+    from openai import OpenAI
+
+    if get_input is None:
+        get_input = input
+    history, num_turns, total_tokens, total_cost = [], 0, 0, 0.0
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    while True:
+        if max_turns is not None and num_turns >= max_turns:
+            break
+        user_msg = get_input()
+        if user_msg.strip().lower() in ("quit", "exit"):
+            break
+        messages = [{"role": "system", "content": persona}] + history + [{"role": "user", "content": user_msg}]
+        stream = retry_with_backoff(lambda: client.chat.completions.create(
+            model=OPENAI_MODEL, messages=messages, stream=True))
+        reply = ""
+        for chunk in stream:
+            delta = chunk.choices[0].delta.content or ""
+            print(delta, end="", flush=True)
+            reply += delta
+        print()
+        response_stats = estimate_cost(user_msg, reply, model=OPENAI_MODEL)
+        total_tokens += response_stats["input_tokens"] + response_stats["output_tokens"]
+        total_cost += response_stats["total_cost"]
+        history.append({"role": "user", "content": user_msg})
+        history.append({"role": "assistant", "content": reply})
+        num_turns += 1
+        history = history[-6:]
+    return {"num_turns": num_turns, "total_tokens": total_tokens, "total_cost": total_cost, "history": history}
 
 
 # ===========================================================================
@@ -400,8 +476,12 @@ def batch_compare(prompts: list[str]) -> list[dict]:
         key "prompt" chứa prompt gốc.
     """
     # TODO (bonus): lặp qua prompts, gọi compare_models, thêm key "prompt"
-    raise NotImplementedError("Implement batch_compare")
-
+    results = []
+    for prompt in prompts:
+        result = compare_models(prompt)
+        result["prompt"] = prompt
+        results.append(result)
+    return results
 
 def format_comparison_table(results: list[dict]) -> str:
     """
@@ -411,26 +491,66 @@ def format_comparison_table(results: list[dict]) -> str:
     Gợi ý: cắt text dài còn 40 ký tự cho dễ nhìn.
     """
     # TODO (bonus): dựng chuỗi bảng và trả về
-    raise NotImplementedError("Implement format_comparison_table")
+    def truncate(text: str, width: int = 40) -> str:
+            text = text.replace("\n", " ")
+    
+            if len(text) <= width:
+                return text
+    
+            return text[:width - 3] + "..."
+    
+    header = (
+        f"{'Prompt':40} | "
+        f"{'GPT-4o Response':40} | "
+        f"{'Mini Response':40} | "
+        f"{'GPT-4o Latency':15} | "
+        f"{'Mini Latency':15}"
+    )
+
+    rows = [header]
+    rows.append("-" * len(header))
+
+    for result in results:
+        rows.append(
+            f"{truncate(result['prompt']):40} | "
+            f"{truncate(result['gpt4o_response']):40} | "
+            f"{truncate(result['mini_response']):40} | "
+            f"{result['gpt4o_latency']:<15.3f} | "
+            f"{result['mini_latency']:<15.3f}"
+        )
+
+    return "\n".join(rows)
 
 
 # ---------------------------------------------------------------------------
 # Entry point — demo chạy thật (cần OPENAI_API_KEY)
 # ---------------------------------------------------------------------------
-if __name__ == "__main__":
-    print("=== So sánh model ===")
-    result = compare_models(
-        "Giải thích khác biệt giữa temperature và top_p trong một câu."
-    )
-    for key, value in result.items():
-        print(f"{key}: {value}")
+# if __name__ == "__main__":
+#     print("=== So sánh model ===")
+#     result = compare_models(
+#         "Giải thích khác biệt giữa temperature và top_p trong một câu."
+#     )
+#     for key, value in result.items():
+#         print(f"{key}: {value}")
 
-    print("\n=== Trợ lý CLI (gõ 'quit' để thoát) ===")
-    stats = run_assistant(
-        persona="Bạn là trợ giảng thân thiện của khóa AI, "
-                "trả lời ngắn gọn bằng tiếng Việt.",
-    )
-    print("\n--- Thống kê phiên chat ---")
-    for key, value in stats.items():
-        if key != "history":
-            print(f"{key}: {value}")
+#     print("\n=== Trợ lý CLI (gõ 'quit' để thoát) ===")
+#     stats = run_assistant(
+#         persona="Bạn là trợ giảng thân thiện của khóa AI, "
+#                 "trả lời ngắn gọn bằng tiếng Việt.",
+#     )
+#     print("\n--- Thống kê phiên chat ---")
+#     for key, value in stats.items():
+#         if key != "history":
+#             print(f"{key}: {value}")
+
+
+question = "Giải thích blockchain là gì?"
+
+prompts = [
+    "Bạn là giáo viên tiểu học, giải thích thật đơn giản cho trẻ 8 tuổi.",
+    "Bạn là chuyên gia tài chính, trả lời chuyên sâu bằng thuật ngữ kỹ thuật."
+]
+
+for prompt in prompts:
+    print(f"\n=== {prompt} ===")
+    print(chat_with_system_prompt(prompt, question))
